@@ -164,21 +164,24 @@ def render_main_page():
         last_name = sign_col2.text_input("Last name")
         dob = st.date_input("When's your birthday",)
         email = st.text_input("Email ID")
-        bank_accounts = []
+        bank_accounts = {}
         num_accounts = st.number_input("Number of Accounts to Add", min_value=1, value=1)
         for i in range(1,num_accounts+1):
-            bank_accounts.append({'name': add_account(i)})
+            acc_name, acc_bal = add_account(i)
+            bank_accounts[acc_name] = acc_bal
 
-        # st.write("Bank Account Names:")
-        # for account in bank_accounts:
-        #     st.write(account['name'])
+        st.write("Bank Account Names:")
+        for account in bank_accounts:
+            st.write(f"{account} : {bank_accounts[account]}")
 
         submitted = st.button("Update Details",type='primary',use_container_width=True)
 
 
 def add_account(i):
-    new_account = st.text_input(f"Account {i}")
-    return new_account
+    col1, col2 = st.columns(2)
+    new_account = col1.text_input(f"Account {i}")
+    new_balance = col2.number_input(f"Total Balance for Account {i}")
+    return new_account,new_balance
     # You can add more pages to the sidebar here (they will only be visible after login)
 
 
