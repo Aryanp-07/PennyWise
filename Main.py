@@ -308,7 +308,7 @@ def render_main_page():
         st.title("📆 Remind My Bills")
         st.divider()
         sign_col1,sign_col2 = st.columns(2)
-        due_date = sign_col1.date_input(f"Due Date of Bill")
+        due_date = sign_col1.date_input("Due Date of Bill",min_value=dt.now().date())
         category = sign_col2.selectbox('Category',('❓ Others','🍔 Food & Drinks', '🛒 Shopping','🏚️ Housing','🚌 Transportation','🚗 Vehicle','💃 Life & Entertainment','📺 Communication & TV', '💳 Financial expense','💲 Investments','💸 Income'),index=1)
         amount = sign_col1.number_input('Amount')
         if category=='❓ Others':
