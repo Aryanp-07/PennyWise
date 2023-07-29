@@ -111,6 +111,7 @@ def render_main_page():
     mydb = connect_to_mongodb()
     user_col = mydb['User']
     login_col = mydb['Login']
+    record_col = mydb['Records']
 
     st.markdown(
         """
@@ -137,27 +138,39 @@ def render_main_page():
         saved_accounts = user_col.find({'Email':get_username()[0]})[0]['Accounts']
         key_iter = iter(saved_accounts)
         val_iter = iter(saved_accounts.values())
+        account_list = []
         # --------- FrontEnd --------- #
         st.title(f"Welcome, {user_col.find({'Email':get_username()[0]})[0]['First Name']}")
         st.subheader("Get Tracking!")
         st.divider()
+
         mylist = st.columns(len(saved_accounts))
         for i in range(0,len(saved_accounts)):
-            mylist[i].metric(label=next(key_iter), value=next(val_iter), delta="₹500")
+            name = next(key_iter)
+            bal = next(val_iter)
+            mylist[i].metric(label=name, value=bal, delta="₹500")
+            account_list.append(name)
+
         st.divider()      
         sign_col1,sign_col2 = st.columns(2)
         record_type = sign_col1.selectbox("Pick type of record",["Income","Expense"])
         date = sign_col2.date_input(f"Date of {record_type}")
         amount = sign_col1.number_input('Amount')
         category = sign_col2.selectbox('Category',('❓ Others','🍔 Food & Drinks', '🛒 Shopping','🏚️ Housing','🚌 Transportation','🚗 Vehicle','💃 Life & Entertainment','📺 Communication & TV', '💳 Financial expense','💲 Investments','💸 Income'),index=1)
-        account = sign_col1.selectbox("Select the account",['Cash','ICICI'])
+        account = sign_col1.selectbox("Select the account",account_list)
         if category=='❓ Others':
             other_cat = sign_col2.text_input("Enter the custom category")
         comments = st.text_area("Any comments?",placeholder="Spent on food at the store near school")
         submit = st.button("Submit Record",type='primary',use_container_width=True)
 
-        
-
+        if submit:
+            if(amount==0.00):
+                st.error('Please enter a non-zero amount!', icon="🚨")
+            else:
+                if(category!='❓ Others'):
+                    record_col.insert_one({'Username':get_username()[0],'Date':str(date),'Type':record_type,'Category':category,'Account':account,'Amount':amount,'Comments':comments})
+                else:
+                    record_col.insert_one({'Username':get_username()[0],'Date':str(date),'Type':record_type,'Category':category,'Category Description':other_cat,'Account':account,'Amount':amount,'Comments':comments})
 
         # st.error('This is an error', icon="🚨")
         # st.warning('This is a warning', icon="⚠️")
