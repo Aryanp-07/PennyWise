@@ -2,8 +2,27 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
 import numpy as np
-
 import time
+import pymongo
+
+def connect_to_mongodb():
+    try:
+        conn = pymongo.MongoClient("mongodb://localhost:27017")
+        mydb = conn['PennyWise']
+
+        return mydb
+
+    except:
+            print("Error")
+
+
+@st.cache_resource()
+def get_username():
+    return [None]
+
+def set_username(user):
+    username = get_username()
+    username[0] = user
 
 @st.cache_resource()
 def get_login_status():
@@ -16,6 +35,7 @@ def set_login_status(logged_in):
 
 
 def main():
+
     # Check if user is logged in
     logged_in = get_login_status()[0]
 
@@ -26,8 +46,11 @@ def main():
         # If the user is logged in, show the main app page
         render_main_page()
 
-
 def render_login_page():
+    mydb = connect_to_mongodb()
+    user_col = mydb['User']
+    login_col = mydb['Login']
+
     st.title('PennyWise :moneybag:')
     st.header("Your Personal Finance Tracker")
     st.divider()
@@ -36,16 +59,23 @@ def render_login_page():
         st.subheader("Login")
         username = st.text_input('Username')
         password = st.text_input('Password', type='password')
-
         # Every form must have a submit button.
         submitted = st.form_submit_button("Submit")
         if submitted:
-            if username == "123" and password == "123":
-                set_login_status(True)
-                st.experimental_rerun()
-            else:
+            try:
+                if(username == login_col.find({"Username":username})[0]['Username'] and password==login_col.find({"Username":username})[0]['Password']):
+                    set_username(username)
+                    set_login_status(True)
+                    st.experimental_rerun()
+                elif(password!=login_col.find({"Username":username})[0]['Password']):
+                    st.error(
+                        'The entered username/password is incorrect. Please try again.', icon="🚨")
+                    
+                    
+            except IndexError as e:
                 st.error(
-                    'The entered username/password is incorrect. Please try again.', icon="🚨")
+                        'The entered username/password is incorrect. Please try again.', icon="🚨")
+                
 
     st.divider()
     my_expander = st.expander("Don't have an account?")
@@ -57,13 +87,30 @@ def render_login_page():
         last_name = sign_col2.text_input("Last name")
         sign_username = st.text_input('Set Username')
         sign_password = st.text_input('Set Password', type='password')
+
         signup = st.button("Sign Up")
         if signup:
-            set_login_status(True)
-            st.experimental_rerun()
+            names = [name['Username'] for name in (record for record in login_col.find({},{"Username":1,"_id":0}))]
+            if(sign_username not in names):
+                if(first_name.strip()=="" or last_name.strip()=="" or sign_username.strip()=="" or sign_password.strip()==""):
+                    st.error(
+                        'Please fill the above details before proceeding!', icon="🚨")
+                else:
+                    user_col.insert_one({"First Name":first_name, "Last Name":last_name, "Email":sign_username,"Accounts":{}})
+                    login_col.insert_one({"Username":sign_username,"Password":sign_password})
+                    st.success('User successfully created. Please Log in!', icon="✅")
+                    # set_login_status(True)
+                    # st.experimental_rerun()
+            else:
+                st.error(
+                        'User already exists!', icon="🚨")
+
 
 
 def render_main_page():
+    mydb = connect_to_mongodb()
+    user_col = mydb['User']
+    login_col = mydb['Login']
 
     st.markdown(
         """
@@ -86,12 +133,17 @@ def render_main_page():
         st.experimental_rerun()
 
     if selected == 'Home':
-        st.title("Welcome, User")
+        # --------- MongoDB  --------- #
+        saved_accounts = user_col.find({'Email':get_username()[0]})[0]['Accounts']
+        key_iter = iter(saved_accounts)
+        val_iter = iter(saved_accounts.values())
+        # --------- FrontEnd --------- #
+        st.title(f"Welcome, {user_col.find({'Email':get_username()[0]})[0]['First Name']}")
         st.subheader("Get Tracking!")
         st.divider()
-        sign_col1,sign_col2 = st.columns(2)
-        sign_col1.metric(label="Cash", value="₹5000", delta="-₹500")        
-        sign_col2.metric(label="ICICI", value="₹12000", delta="₹700")  
+        mylist = st.columns(len(saved_accounts))
+        for i in range(0,len(saved_accounts)):
+            mylist[i].metric(label=next(key_iter), value=next(val_iter), delta="₹500")
         st.divider()      
         sign_col1,sign_col2 = st.columns(2)
         record_type = sign_col1.selectbox("Pick type of record",["Income","Expense"])
@@ -136,7 +188,7 @@ def render_main_page():
         )
         st.subheader('24/7/2023')
         col1,col2 = st.columns(2)
-        rec1 = col1.multiselect("Record #1",options=['Expense','🍔 Food & Drinks','₹525','Cash'],default=['Expense','🍔 Food & Drinks','₹525','Cash'])
+        rec1 = col1.multiselect("Record #1",options=['Expense','🍔 Food & Drinks','₹525','Cash'],default=['Expense','🍔 Food & Drinks','₹525','Cash'],disabled=True)
         rec2_button = col1.button("Edit Record #1")
         rec2 = col2.multiselect("Record #2",options=['Income','💸 Income','₹1090','ICICI'],default=['Income','💸 Income','₹1090','ICICI'])
         rec2_button = col2.button("Edit Record #2")
@@ -160,30 +212,42 @@ def render_main_page():
     elif selected == 'Settings':
         st.title("User Details")
         sign_col1, sign_col2 = st.columns(2)
-        first_name = sign_col1.text_input("First name")
-        last_name = sign_col2.text_input("Last name")
+        first_name = sign_col1.text_input("First name",value=user_col.find({'Email':get_username()[0]})[0]['First Name'])
+        last_name = sign_col2.text_input("Last name",value=user_col.find({'Email':get_username()[0]})[0]['Last Name'])
         dob = st.date_input("When's your birthday",)
-        email = st.text_input("Email ID")
+        email = st.text_input("Email ID", value=user_col.find({'Email':get_username()[0]})[0]['Email'],disabled=True)
+        password = st.text_input("Change Password",type='password',value=login_col.find({'Username':get_username()[0]})[0]['Password'])
         bank_accounts = {}
-        num_accounts = st.number_input("Number of Accounts to Add", min_value=1, value=1)
+        saved_accounts = user_col.find({'Email':get_username()[0]})[0]['Accounts']
+        num_accounts = st.number_input("Number of Accounts to Add", min_value=1, value=(len(saved_accounts) or 1))
+        key_iter = iter(saved_accounts)
+        val_iter = iter(saved_accounts.values())
         for i in range(1,num_accounts+1):
-            acc_name, acc_bal = add_account(i)
+            acc_name, acc_bal = add_account(i,next(key_iter, None),next(val_iter, None))
             bank_accounts[acc_name] = acc_bal
 
-        st.write("Bank Account Names:")
-        for account in bank_accounts:
-            st.write(f"{account} : {bank_accounts[account]}")
-
+        # st.write("Bank Account Names:")
+        # st.write(bank_accounts)
+        # for account in bank_accounts:
+        #     st.write(f"{account} : {bank_accounts[account]}")
+        # saved_accounts = user_col.find({'Email':get_username()[0]})[0]['Accounts']
+        # st.write(saved_accounts)
+        # for k in saved_accounts.keys():
+        #     st.write(k)
         submitted = st.button("Update Details",type='primary',use_container_width=True)
+        if submitted:
+            if(num_accounts<len(bank_accounts)):
+                pass
+            user_col.update_one({'Email':get_username()[0]},{'$set':{'First Name':first_name,'Last Name':last_name, 'DOB':str(dob),'Email':email,'Accounts':bank_accounts}})
+            login_col.update_one({'Username':get_username()[0]},{'$set':{'Username':email,'Password':password}})
 
 
-def add_account(i):
+def add_account(i,acc,bal):
     col1, col2 = st.columns(2)
-    new_account = col1.text_input(f"Account {i}")
-    new_balance = col2.number_input(f"Total Balance for Account {i}")
+    new_account = col1.text_input(f"Account {i}",value=(acc or ""))
+    new_balance = col2.number_input(f"Total Balance for Account {i}",value=(bal or 0.00),min_value=0.00)
     return new_account,new_balance
     # You can add more pages to the sidebar here (they will only be visible after login)
-
 
 if __name__ == "__main__":
     main()
