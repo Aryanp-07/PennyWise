@@ -198,6 +198,8 @@ def render_main_page():
     accounts_col = mydb['Accounts']
     bills_col = mydb['Bills']
 
+    # categories stored in a variable
+    categories_list = ('❓ Others','🍔 Food & Drinks', '🛒 Shopping','🏚️ Housing','🚌 Transportation','🚗 Vehicle','💃 Life & Entertainment','📺 Communication & TV', '💳 Financial expense','💲 Investments','💸 Income')
     # customize the logout button using CSS
     st.markdown(
         """
@@ -212,8 +214,8 @@ def render_main_page():
 
     # You can add more pages to the sidebar here (they will only be visible after login)
     with st.sidebar:
-        selected = option_menu("Main Menu", ["Home", "Records", "Bills", "Dashboard", 'Settings'],
-                               icons=['house', 'journals', 'newspaper', 'graph-up-arrow', 'gear'], menu_icon="coin", default_index=0)
+        selected = option_menu("Main Menu", ["Home", "Records", "Edit Record","Bills", "Dashboard", 'Settings'],
+                               icons=['house', 'journals', 'pencil-square','newspaper', 'graph-up-arrow', 'gear'], menu_icon="coin", default_index=0)
         logout_button = st.button("Logout")
     
     # if Logout button is clicked, globally set login_status False so that Login page is rendered
@@ -251,7 +253,7 @@ def render_main_page():
         record_type = sign_col1.selectbox("Pick type of record",["Income","Expense"])
         date = sign_col2.date_input(f"Date of {record_type}")
         amount = sign_col1.number_input('Amount')
-        category = sign_col2.selectbox('Category',('❓ Others','🍔 Food & Drinks', '🛒 Shopping','🏚️ Housing','🚌 Transportation','🚗 Vehicle','💃 Life & Entertainment','📺 Communication & TV', '💳 Financial expense','💲 Investments','💸 Income'),index=1)
+        category = sign_col2.selectbox('Category',categories_list,index=1)
         account = sign_col1.selectbox("Select the account",account_list)
         if category=='❓ Others':
             other_cat = sign_col2.text_input("Enter the custom category")
@@ -280,6 +282,7 @@ def render_main_page():
 
                 # update the accounts collection with new amounts
                 accounts_col.update_one({'Username':get_username()[0]},{'$set':{'Accounts':saved_accounts}})
+                st.experimental_rerun()
 
         # st.error('This is an error', icon="🚨")
         # st.warning('This is a warning', icon="⚠️")
@@ -288,15 +291,6 @@ def render_main_page():
         # e = RuntimeError('This is an exception of type RuntimeError')
         # st.exception(e)
 
-    # if Dashboard selected in Menubar
-    elif selected == 'Dashboard':
-        st.title("📈 Review Time")
-        st.divider()
-        st.subheader("Income vs. Expense")
-        chart_data = pd.DataFrame(
-        np.random.randn(20, 2),columns=['Income', 'Expense'])
-
-        st.line_chart(chart_data)
         
 
     # if Records selected in Menubar
@@ -306,12 +300,15 @@ def render_main_page():
         saved_accounts = accounts_col.find({'Username':get_username()[0]})[0]['Accounts']
         # iterate through the account name
         key_iter = iter(saved_accounts)
+        # create a list for all the account names without 'All'
+        filtered_account_list = []
         # create a list for all the account names
         account_list = ['All']
         # append all account names into account_list
         for i in range(0,len(saved_accounts)):
             name = next(key_iter)
             account_list.append(name)
+            filtered_account_list.append(name)
 
         # --------- FrontEnd --------- #    
         st.title("🗃️ Record Archive")
@@ -359,7 +356,7 @@ def render_main_page():
             query['Category'] = filters['category']
 
         # find all records for user according to filter and sort according to date
-        cursor = record_col.find(query, {"_id": 0, 'Username': 0}).sort("Date", pymongo.DESCENDING)
+        cursor = record_col.find(query,{}).sort("Date", pymongo.DESCENDING)
         
         # filter_check = st.checkbox("Do you want to search by date?")
         # if filter_check:
@@ -380,8 +377,10 @@ def render_main_page():
                     if(date==str(date_filter)):
                         st.header(f"{date}")
                         for record in records:
-                            with st.expander(f"{record['Comments']}"):
-                                st.write(record)
+                            # create a filtered record with _id and Username excluded for the display
+                            filtered_record = {key:value for key,value in record.items() if key not in ['_id','Username']}
+                            with st.expander(f"{record['Category']} - {record['Comments']}"):
+                                st.write(filtered_record)
                 # display the following if no records exist for the searched date
                 if(str(date_filter) not in grouped_records.keys()):
                     st.info("You have no records for this date", icon="🤖")
@@ -390,8 +389,12 @@ def render_main_page():
                 for date, records in grouped_records.items():
                     st.header(f"{date}")
                     for record in records:
-                        with st.expander(f"{record['Comments']}"):
-                            st.write(record)
+                        # create a filtered record with _id and Username excluded for the display
+                        filtered_record = {key:value for key,value in record.items() if key not in ['_id','Username']}
+                        with st.expander(f"{record['Category']} - {record['Comments']}"):
+                            st.write(filtered_record)
+
+
         else:
             # Display if no records exist
             st.info("You have no records", icon="🤖")
@@ -415,6 +418,114 @@ def render_main_page():
         # rec2_button = col1.button("Edit Record #1")
         # rec2 = col2.multiselect("Record #2",options=['Income','💸 Income','₹1090','ICICI'],default=['Income','💸 Income','₹1090','ICICI'])
         # rec2_button = col2.button("Edit Record #2")
+    
+    # if Edit Record selected in Menubar
+    elif selected == 'Edit Record':
+        # retrieve all the accounts of user
+        saved_accounts = accounts_col.find({'Username':get_username()[0]})[0]['Accounts']
+        # iterate through the account name
+        key_iter = iter(saved_accounts)
+        # create a list for all the account names without 'All'
+        filtered_account_list = []
+        # append all account names into account_list
+        for i in range(0,len(saved_accounts)):
+            name = next(key_iter)
+            filtered_account_list.append(name)
+
+        st.title("📝 Edit Past Record")
+        st.divider()
+        # create a new list to store records
+        record_list = ['Select record']
+        # take user input for date of record to be edited
+        edit_date = st.date_input("Which date does the record belong to?")
+        # filter the records available for that date
+        cursor = record_col.find({'Username': get_username()[0],'Date':str(edit_date)})
+        records = list(cursor)
+        # if records exist for that date
+        if records:
+            for record in records:
+                # append all records to record_list
+                record_list.append(f"{record['Category']} - {record['Comments']}")
+            # take user input for record to edit
+            selected_edit_record = st.selectbox("Which record do you wish to edit?",record_list)
+            if selected_edit_record!='Select record':
+                # find the record in mongodb and store in selected_record
+                selected_record = record_col.find_one({'Username': get_username()[0], 'Date': str(edit_date), 'Category': selected_edit_record.split(' - ')[0], 'Comments': selected_edit_record.split(' - ')[1]})
+                st.write(selected_record)
+                # save the account name before edit (incase the account is changed, balance will have to change) 
+                old_account = selected_record['Account']
+                # save the record type before edit (incase the type is changed, balance will have to change) 
+                old_type = selected_record['Type']
+                sign_col1,sign_col2 = st.columns(2)
+                # take user inputs
+                record_type = sign_col1.selectbox("Pick type of record",["Income","Expense"],index=(0 if selected_record['Type']=='Income' else 1))
+                date = sign_col2.date_input(f"Date of {record_type}",value=dt.strptime(selected_record['Date'], '%Y-%m-%d'))
+                amount = sign_col1.number_input('Amount',value=selected_record['Amount'])
+                category = sign_col2.selectbox('Category',categories_list,index=categories_list.index(selected_record['Category']))
+                account = sign_col1.selectbox("Select the account",filtered_account_list,index=filtered_account_list.index(selected_record['Account']))
+                if category=='❓ Others':
+                    other_cat = sign_col2.text_input("Enter the custom category",value=selected_record['Category Description'])
+                comments = st.text_area("Any comments?",placeholder="Spent on food at the store near school",value=selected_record['Comments'])
+                update = st.button("Update Record",type='primary',use_container_width=True)
+
+                # if update record button is clicked
+                if update:
+                    # update the record in database
+                    if category=='❓ Others':
+                        record_col.update_one({'Username': get_username()[0],'_id':selected_record['_id']},{'$set':{'Date':str(date),'Type':record_type,'Category':category,'Category Description':other_cat,'Account':account,'Amount':amount,'Comments':comments}})
+                    else:
+                        record_col.update_one({'Username': get_username()[0],'_id':selected_record['_id']},{'$set':{'Date':str(date),'Type':record_type,'Category':category,'Account':account,'Amount':amount,'Comments':comments}})
+                    # save the account name after edit (incase the account is changed, balance will have to change) 
+                    new_account = selected_record['Account']
+                    # save the record type after edit (incase the type is changed, balance will have to change) 
+                    new_type = selected_record['Type']
+                    # get list of all accounts of user
+                    edit_saved_accounts = accounts_col.find({'Username':get_username()[0]})[0]['Accounts']
+
+                    # compare accounts to check if account is changed
+                    if old_account!=new_account and old_type==new_type:
+                        # if record type is Expense
+                        if selected_record['Type']=='Expense':
+                            edit_saved_accounts[old_account] += amount
+                            edit_saved_accounts[new_account] -= amount
+
+                        # if record type is Income
+                        elif selected_record['Type']=='Income':
+                            edit_saved_accounts[old_account] -= amount
+                            edit_saved_accounts[new_account] += amount
+
+                    # compare types to check if type is changed
+                    elif old_account==new_account and old_type!=new_type:
+                        # if record type is Expense
+                        if new_type=='Expense':
+                            edit_saved_accounts[new_account] -= (2*amount)
+                        # if record type is Income
+                        elif new_type=='Income':
+                            edit_saved_accounts[new_account] += (2*amount)
+                    
+                    # compare accounts and types to check if both have changed is changed
+                    elif old_account!=new_account and old_type!=new_type:
+                        # if record type is Expense
+                        if new_type=='Expense':
+                            edit_saved_accounts[old_account] -= amount
+                            edit_saved_accounts[new_account] -= amount
+
+                        # if record type is Income
+                        elif new_type=='Income':
+                            edit_saved_accounts[old_account] += amount
+                            edit_saved_accounts[new_account] += amount
+
+                        
+                    # update the accounts collection with new amounts
+                    accounts_col.update_one({'Username':get_username()[0]},{'$set':{'Accounts':edit_saved_accounts}})
+                    st.experimental_rerun()
+                        
+
+                    st.success("Record Successfully Updated",icon='✅')
+
+        else:
+            st.info("You have no records for this date", icon="🤖")
+
 
     # If Bills is selected in Menubar
     elif selected == 'Bills':
@@ -424,13 +535,13 @@ def render_main_page():
 
         # take user input
         due_date = sign_col1.date_input("Due Date of Bill",min_value=dt.now().date())
-        category = sign_col2.selectbox('Category',('❓ Others','🍔 Food & Drinks', '🛒 Shopping','🏚️ Housing','🚌 Transportation','🚗 Vehicle','💃 Life & Entertainment','📺 Communication & TV', '💳 Financial expense','💲 Investments','💸 Income'),index=1)
+        category = sign_col2.selectbox('Category',categories_list,index=1)
         amount = sign_col1.number_input('Amount')
         if category=='❓ Others':
             other_cat = sign_col2.text_input("Enter the custom category")
         repeating = sign_col1.checkbox('This is a Recurring Bill')
         if repeating:
-            reminder = sign_col2.selectbox("Remind Me", ('Daily','Monthly','Yearly'))
+            reminder = sign_col2.selectbox("Remind Me", ('Monthly','Yearly'))
         else:
             reminder = 'NA'
         comments = st.text_area("Any comments?",placeholder="Need to pay the Electricity bill")
@@ -457,7 +568,8 @@ def render_main_page():
         query = {'Username': get_username()[0]}
 
         #hide _id and username from display data
-        projection = {"_id": 0, 'Username': 0}
+        projection = {}
+        # projection = {"_id": 0, 'Username': 0}
         
         # find all bills for user but sorted according to due date
         cursor = bills_col.find(query, projection).sort("Due Date", pymongo.ASCENDING)
@@ -479,9 +591,9 @@ def render_main_page():
 
             # Display the bills grouped by days left using the expander widget
             for days_left, bills_list in sorted(grouped_bills.items()):
-                if days_left == 0:
+                # if the due date is crossed
+                if days_left < 0:
                     for bill in bills_list:
-
                         # Check for bills with "Monthly" or "Yearly" reminder and create a new bill for the next month/year
                         if bill["Remind"] == "Monthly" or bill["Remind"] == "Yearly":
                             create_next_bill(bill,bills_col)
@@ -490,11 +602,23 @@ def render_main_page():
                         bills_col.delete_one({"_id": bill["_id"]})
                 st.header(f"{days_left} Days left for")
                 for bill in bills_list:
-                    with st.expander(f"{bill['Category']} - {bill['Due Date']}"):
-                        st.write(bill)
+                    # create a filtered bill with _id and Username excluded for the display
+                    filtered_bill = {key:value for key,value in bill.items() if key not in ['_id','Username']}
+                    with st.expander(f"{bill['Category']} - {bill['Comments']}"):
+                        st.write(filtered_bill)
         else:
             st.info("You have no bills due", icon="💡")
 
+    # if Dashboard selected in Menubar
+    elif selected == 'Dashboard':
+        st.title("📈 Review Time")
+        st.divider()
+        st.subheader("Income vs. Expense")
+        chart_data = pd.DataFrame(
+        np.random.randn(20, 2),columns=['Income', 'Expense'])
+
+        st.line_chart(chart_data)
+    
     # If Settings is selected in Menubar
     elif selected == 'Settings':
         st.title("User Details")
