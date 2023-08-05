@@ -21,7 +21,7 @@ def configure():
     load_dotenv()
 #function to connect to mongodb
 def connect_to_mongodb():
-    uri = "mongodb+srv://"+os.getenv('user')+":"+os.getenv('pass')+"@"+os.getenv('url')+"/?retryWrites=true&w=majority"
+    uri = f"mongodb+srv://{os.getenv('user')}:{os.getenv('pass')}@{os.getenv('url')}/?retryWrites=true&w=majority"
     client = MongoClient(uri, server_api=ServerApi('1'))
     try:
         # Create a new client and connect to the server
