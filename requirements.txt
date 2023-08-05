@@ -1,0 +1,7 @@
+streamlit_option_menu
+
+streamlit
+
+python-dotenv
+
+pymongo
