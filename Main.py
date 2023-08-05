@@ -7,18 +7,29 @@
 # ----------- Imports ----------- #
 import streamlit as st
 from streamlit_option_menu import option_menu
+from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
 import time
 import pymongo
+import os
 from datetime import datetime as dt, timedelta
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
 
+def configure():
+    load_dotenv()
 #function to connect to mongodb
 def connect_to_mongodb():
     try:
-        conn = pymongo.MongoClient("mongodb://localhost:27017")
-        mydb = conn['PennyWise']
+        uri = "mongodb+srv://"+os.getenv('user')+":"+os.getenv('pass')+"@"+os.getenv('url')+"/?retryWrites=true&w=majority"
+        client = MongoClient(uri, server_api=ServerApi('1'))
+        # Create a new client and connect to the server
+        mydb = client['PennyWise']
         return mydb
+        # conn = pymongo.MongoClient("mongodb://localhost:27017")
+        # mydb = conn['PennyWise']
+        # return mydb
 
     except:
             print("Error")
@@ -84,12 +95,12 @@ def add_account(i,acc,bal):
     # insert new text_input for account name
     new_account = col1.text_input(f"Account {i}",value=(acc or ""))
     # insert new number_input for account balance 
-    new_balance = col2.number_input(f"Total Balance for Account {i}",value=(bal or 0.00),min_value=0.00)
+    new_balance = col2.number_input(f"Total Balance for Account {i}",value=(float(bal) or 0.00),min_value=0.00)
     return new_account,new_balance
 
 # Marks start of execution
 def main():
-
+    configure()
     # Check if user is logged in
     logged_in = get_login_status()[0]
 
@@ -451,7 +462,6 @@ def render_main_page():
             if selected_edit_record!='Select record':
                 # find the record in mongodb and store in selected_record
                 selected_record = record_col.find_one({'Username': get_username()[0], 'Date': str(edit_date), 'Category': selected_edit_record.split(' - ')[0], 'Comments': selected_edit_record.split(' - ')[1]})
-                st.write(selected_record)
                 # save the account name before edit (incase the account is changed, balance will have to change) 
                 old_account = selected_record['Account']
                 # save the record type before edit (incase the type is changed, balance will have to change) 
@@ -518,10 +528,9 @@ def render_main_page():
                         
                     # update the accounts collection with new amounts
                     accounts_col.update_one({'Username':get_username()[0]},{'$set':{'Accounts':edit_saved_accounts}})
-                    st.experimental_rerun()
-                        
-
                     st.success("Record Successfully Updated",icon='✅')
+
+                    st.experimental_rerun()
 
         else:
             st.info("You have no records for this date", icon="🤖")
